@@ -14,15 +14,15 @@ void res_protector(double& x){
 
 
 void sample_beta_tilde(arma::mat& beta_nc_samp, arma::vec& y, arma::mat& x, arma::colvec& theta_sr,
-                       arma::vec& sig2, arma::colvec& beta_mean, int N, int d, arma::vec delta, Function Rchol){ //
-  
+                       arma::vec& sig2, arma::colvec& beta_mean, int N, int d,  Function Rchol){ //
+
   arma::vec y_star = y - x * beta_mean;
   arma::colvec theta = arma::pow(theta_sr, 2);
   arma::mat theta_sr_diag = arma::diagmat(theta_sr);
   arma::mat Ft = x * theta_sr_diag;
   //arma::mat delta_m = arma::diagmat(arma::pow(delta, -0.5));
   arma::mat I_d = arma::eye(d, d);
-  
+
   arma::mat ft;
   arma::mat Qt;
   arma::mat At;
@@ -74,7 +74,7 @@ void sample_beta_tilde(arma::mat& beta_nc_samp, arma::vec& y, arma::mat& x, arma
     CT.slice(t) = Ct.slice(t) - Bt*(Rt.slice(t+1))*arma::trans(Bt);
     //CT.slice(t) = 0.5*CT.slice(t) + 0.5*arma::trans(CT.slice(t));
     eps = arma::randn(1, d);
-    
+
     chol_success = chol(L_upper, CT.slice(t));
     if(chol_success == false){
       Rcpp::NumericMatrix tmp = Rchol(CT.slice(N), true, false, -1);
@@ -94,7 +94,7 @@ void sample_alpha(arma::vec& alpha_samp, arma::vec& y, arma::mat& x, arma::mat& 
   arma::vec prior_a = a0/arma::join_cols(tau2, xi2);
   arma::mat a = W_til * y + prior_a;
   arma::mat Omega_star = A0_sr * W_til * W * A0_sr + arma::eye(2*d, 2*d);
-  
+
   arma::mat A_t;
   arma::mat A_t_til;
   bool solved = arma::solve(A_t_til, Omega_star, A0_sr, arma::solve_opts::no_approx);
@@ -104,12 +104,12 @@ void sample_alpha(arma::vec& alpha_samp, arma::vec& y, arma::mat& x, arma::mat& 
     arma::mat A0 = arma::diagmat(arma::join_cols(tau2, xi2));
     A_t = arma::inv(W_til * W + arma::inv(diagmat(A0)));
   }
-  
+
   arma::vec v = rnorm(2*d);
-  
+
   arma::mat cholA;
   bool chol_success = chol(cholA, A_t);
-  
+
   // Fall back on Rs chol if armadillo fails (it suppports pivoting)
   if (chol_success == false){
     Rcpp::NumericMatrix tmp = Rchol(A_t, true, false, -1);
@@ -117,7 +117,7 @@ void sample_alpha(arma::vec& alpha_samp, arma::vec& y, arma::mat& x, arma::mat& 
     arma::uvec piv = arma::sort_index(as<arma::vec>(tmp.attr("pivot")));
     cholA = cholA_tmp.cols(piv);
   }
-  
+
   alpha_samp = A_t * a + cholA.t() * v;
   std::for_each(alpha_samp.begin(), alpha_samp.end(), res_protector);
 }
@@ -127,28 +127,28 @@ void resample_alpha_diff(arma::mat& alpha_samp, arma::mat& betaenter, arma::vec&
   arma::vec sign_sqrt = arma::sign(theta_sr);
   arma::colvec theta_sr_new(d, arma::fill::none);
   int p1_theta = -N/2;
-  
+
   arma::vec theta(d, arma::fill::none);
-  
-  
+
+
   for (int j = 0; j < d; j++){
     double p2_theta = 1/xi2(j);
     double p3_theta = arma::as_scalar(arma::accu(arma::pow(beta_diff.row(j), 2))) +
       std::pow((betaenter(j, 0) - beta_mean(j)), 2);
-    
+
     double res = do_rgig1(p1_theta, p3_theta, p2_theta);
     theta(j) = res;
     theta_sr_new(j) = std::sqrt(arma::as_scalar(theta(j))) * sign_sqrt(j);
   }
-  
+
   arma::colvec beta_mean_new(d, arma::fill::none);
-  
+
   for (int j = 0; j < d; j++){
     double sigma2_beta_mean = 1/(1/tau2(j) + 1/(theta(j)));
     double mu_beta_mean = betaenter(j, 0) * tau2(j)/(tau2(j) + theta(j));
     beta_mean_new(j) = R::rnorm(mu_beta_mean, std::sqrt(sigma2_beta_mean));
   }
-  
+
   alpha_samp = arma::join_cols(beta_mean_new, theta_sr_new);
   std::for_each(alpha_samp.begin(), alpha_samp.end(), res_protector);
 }
