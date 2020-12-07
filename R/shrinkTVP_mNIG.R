@@ -482,9 +482,9 @@ shrinkTVP_mNIG <- function(formula,
 
   if(simple){
     if(!sv){
-      res <- list("beta_mean" = beta_mean, "beta_median" = beta_median,
+      res <- list("beta_median" = beta_median, "beta_mean" = beta_mean,
                   "beta_qtl"= beta_qtl, "beta_qtu"= beta_qtu,
-                  "theta_sr" = res$theta_sr,
+                  #"theta_sr" = res$theta_sr,
                   "sigma2" = res$sigma2, "residuals" = residuals,
                   "delta_mean" = delta_mean)
     }else{

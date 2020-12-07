@@ -6,7 +6,7 @@ Author: Who wrote it
 Maintainer: The package maintainer <yourself@somewhere.net>
 Description: More about what it does (maybe more than one line)
     Use four spaces when indenting paragraphs within the Description.
-License: What license is it under?
+License: GPL (>= 2)
 Depends: R (>= 3.3.0), snowfall, PARCOR
 Imports: Rcpp, GIGrvg, stochvol, coda, methods, utils, zoo, snowfall, PARCOR
 LinkingTo: Rcpp, RcppArmadillo, GIGrvg, RcppProgress, stochvol, snowfall, PARCOR

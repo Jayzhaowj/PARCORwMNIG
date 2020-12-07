@@ -69,7 +69,8 @@ PARCOR_shrinkage <- function(Y, P,
                              SAVS = TRUE,
                              sv = FALSE,
                              sv_param,
-                             simple = TRUE){
+                             simple = TRUE,
+                             delta, S_0, sample_size = 500, chains = 5, DIC = FALSE, uncertainty = FALSE){
   nsave <- (niter - nburn)/nthin
   default_hyper <- list(c0 = 2.5,
                         g0 = 5,
@@ -95,8 +96,8 @@ PARCOR_shrinkage <- function(Y, P,
   K <- ncol(Y)
   ## number of time points
   n_Total <- nrow(Y)
+  ### storage results
   result_all <- list("median" = NA, "mean" = NA, "qtl" = NA, "qtu" = NA)
-
   PHI_fwd <- array(NA, dim = c(K^2, n_Total, P))
   PHI_bwd <- array(NA, dim = c(K^2, n_Total, P))
   PHI_star_fwd <- array(NA, dim = c(K^2, n_Total, P))
@@ -104,7 +105,6 @@ PARCOR_shrinkage <- function(Y, P,
   u_inv_fwd <- array(0, dim = c((K^2-K)/2, n_Total, P))
   u_inv_bwd <- array(0, dim = c((K^2-K)/2, n_Total, P))
   theta_sr <- rep(list(NA), P)
-
   result <- list(PHI_fwd = PHI_fwd, PHI_bwd = PHI_bwd,
                  PHI_star_fwd = PHI_star_fwd, PHI_star_bwd = PHI_star_bwd,
                  u_inv_fwd = u_inv_fwd, u_inv_bwd = u_inv_bwd,
@@ -114,62 +114,53 @@ PARCOR_shrinkage <- function(Y, P,
   result_all$qtl <- result
   result_all$qtu <- result
 
-  data <- build_model(F1_fwd = Y, F1_bwd = Y, P = P,
-                      m = 1, K = K, n_Total = n_Total)
-  #browser()
-  #res <- rep(list(NA), P)
-
-  #browser()
   PHI_fwd_samp <- array(NA, dim = c(K^2, n_Total, P, nsave))
   PHI_bwd_samp <- array(NA, dim = c(K^2, n_Total, P, nsave))
-  ### storage results
 
-  #browser()
+
+  ### stage m = 1
+  result1 <- run_parcor_parallel(F1 = t(Y), delta = delta, P = 1, S_0 = S_0, sample_size = sample_size,
+                                 chains = chains, DIC = DIC, uncertainty = uncertainty)
+  result_all$median$PHI_fwd[, , 1] <- result1$phi_fwd
+  result_all$median$PHI_bwd[, , 1] <- result1$phi_bwd
+
+  ### stage m = 2
+  data <- build_model(F1_fwd = t(result1$F1_fwd), F1_bwd = t(result1$F1_bwd), P = P,
+                      m = 2, K = K, n_Total = n_Total)
+
   sfInit(parallel = TRUE, cpus = cpus, type = "SOCK")
-  sfLibrary(GIGrvg)
-  sfLibrary(coda)
-  sfLibrary(Rcpp)
-  sfLibrary(RcppArmadillo)
-  sfLibrary(stochvol)
-  sfLibrary(PARCORwMNIG)
-  #sfClusterEval(sourceCpp("shrinkTVP_mNIG.cpp"))
-  #sfSource("shrinkTVP_mNIG.R")
-  sfExportAll()
-  for(i in 1:P){
-    #sfExport("data")
-    #browser()
-    res_tmp <- sfLapply(1:length(data), function(x) shrinkTVP_mNIG(formula = y ~ .-1, data = data[[x]], K = K,
-    #browser()
 
-    #res_tmp <- shrinkTVP_mNIG(formula = y ~ .-1, data = data[[2]], K = K,
-                                                         niter = niter,
-                                                         nburn = nburn,
-                                                         nthin = nthin,
-                                                         hyperprior_param = hyperprior_param[[i]],
-                                                         display_progress = FALSE,
-                                                         ret_beta_nc = ret_beta_nc,
-                                                         SAVS = SAVS,
-                                                         sv = sv,
-                                                         sv_param = sv_param,
-                                                         simple = simple)
-    )
+  sfLibrary(PARCORwMNIG)
+  sfExport("K", "niter", "nburn", "nthin", "hyperprior_param", "ret_beta_nc",
+           "SAVS", "sv", "sv_param", "simple")
+  for(i in 2:P){
+    res_tmp <- sfLapply(1:length(data), function(x) shrinkTVP_mNIG(formula = y ~ .-1,
+                                                                   data = data[[x]], K = K,
+                                                                   niter = niter,
+                                                                   nburn = nburn,
+                                                                   nthin = nthin,
+                                                                   hyperprior_param = hyperprior_param[[i]],
+                                                                   display_progress = FALSE,
+                                                                   ret_beta_nc = ret_beta_nc,
+                                                                   SAVS = SAVS,
+                                                                   sv = sv,
+                                                                   sv_param = sv_param,
+                                                                   simple = simple))
+
 
     if(simple){
-      #browser()
       ### obtain median
       res <- unpack_res(res = res_tmp, m = i, n_Total = n_Total, K = K, type = "beta_median")
-      #browser()
       data <- build_model(F1_fwd = res$resid_fwd,
                           F1_bwd = res$resid_bwd, P = P, m = i+1,
                           K = K, n_Total = n_Total)
-      #browser()
       result_all$median$PHI_fwd[, , i] <- res$phi_fwd
       result_all$median$PHI_bwd[, , i] <- res$phi_bwd
       result_all$median$PHI_star_fwd[, , i] <- res$phi_star_fwd
       result_all$median$PHI_star_bwd[, , i] <- res$phi_star_bwd
       result_all$median$u_inv_fwd[, , i] <- res$u_inv_fwd
       result_all$median$u_inv_bwd[, , i] <- res$u_inv_bwd
-      result_all$median$theta_sr[[i]] <- res_tmp[[1]]$theta_sr
+      #result_all$median$theta_sr[[i]] <- res_tmp$theta_sr
       if(i == P)
         result_all$median$SIGMA <- res$SIGMA
 
@@ -183,7 +174,7 @@ PARCOR_shrinkage <- function(Y, P,
       result_all$qtl$PHI_star_bwd[, , i] <- res$phi_star_bwd
       result_all$qtl$u_inv_fwd[, , i] <- res$u_inv_fwd
       result_all$qtl$u_inv_bwd[, , i] <- res$u_inv_bwd
-      result_all$qtl$theta_sr[[i]] <- res_tmp[[1]]$theta_sr
+      #result_all$qtl$theta_sr[[i]] <- res_tmp$theta_sr
       if(i == P)
         result_all$qtl$SIGMA <- res$SIGMA
 
@@ -197,7 +188,7 @@ PARCOR_shrinkage <- function(Y, P,
       result_all$qtu$PHI_star_bwd[, , i] <- res$phi_star_bwd
       result_all$qtu$u_inv_fwd[, , i] <- res$u_inv_fwd
       result_all$qtu$u_inv_bwd[, , i] <- res$u_inv_bwd
-      result_all$qtu$theta_sr[[i]] <- res_tmp[[1]]$theta_sr
+      #result_all$qtu$theta_sr[[i]] <- res_tmp[[1]]$theta_sr
       if(i == P)
         result_all$qtu$SIGMA <- res$SIGMA
     }else{
@@ -286,8 +277,12 @@ unpack_res <- function(res, m, n_Total, K, type){
   resid_bwd <- matrix(NA, nrow = n_Total, ncol = K)
   phi_fwd <- matrix(NA, nrow = K^2, ncol = n_Total)
   phi_bwd <- matrix(NA, nrow = K^2, ncol = n_Total)
+  phi_int_fwd <- matrix(NA, nrow = K, ncol = n_Total)
+  phi_int_bwd <- matrix(NA, nrow = K, ncol = n_Total)
   phi_star_fwd <- matrix(NA, nrow = K^2, ncol = n_Total)
   phi_star_bwd <- matrix(NA, nrow = K^2, ncol = n_Total)
+  phi_star_int_fwd <- matrix(NA, nrow = K, ncol = n_Total)
+  phi_star_int_bwd <- matrix(NA, nrow = K, ncol = n_Total)
   u_inv_fwd <- matrix(0, nrow = (K^2-K)/2, ncol = n_Total)
   u_inv_bwd <- matrix(0, nrow = (K^2-K)/2, ncol = n_Total)
   index_fwd <- 1
@@ -305,20 +300,21 @@ unpack_res <- function(res, m, n_Total, K, type){
   ###
   for(k in 1:K){
     ### forward
-    phi_star_fwd[seq(k, K^2, by = K), n_1_fwd:n_T_fwd] <- t(res[[k]][[type]][-1, 1:K])
+    phi_star_fwd[((k-1)*K+1):(k*K), n_1_fwd:n_T_fwd] <- t(res[[k]][[type]][-1, 1:K])
     if(k > 1){
       n <- nrow(t(res[[k]][[type]][, 1:(k-1)+K]))
       u_inv_fwd[index_fwd:(index_fwd + n - 1), n_1_fwd:n_T_fwd] <- t(res[[k]][[type]][-1, 1:(k-1)+K])
       index_fwd <- index_fwd + n
     }
     ### backward
-    phi_star_bwd[seq(k, K^2, by = K), n_1_bwd:n_T_bwd] <- t(res[[k+K]][[type]][-1, 1:K])
+    phi_star_bwd[((k-1)*K+1):(k*K), n_1_bwd:n_T_bwd] <- t(res[[k+K]][[type]][-1, 1:K])
 
     if(k > 1){
       n <- nrow(t(res[[k+K]][[type]][, 1:(k-1)+K]))
       u_inv_bwd[index_bwd:(index_bwd + n - 1), n_1_bwd:n_T_bwd] <- t(res[[k+K]][[type]][-1, 1:(k-1)+K])
       index_bwd <- index_bwd + n
     }
+
   }
 
   SIGMA <- rep(list(NA), n_T_fwd - n_1_fwd + 1)
@@ -328,10 +324,9 @@ unpack_res <- function(res, m, n_Total, K, type){
     u_inv <- diag(K)
     u_inv[lower.tri(u_inv)] <- -u_inv_fwd[, i]
     u <- solve(u_inv, diag(K))
-    phi_fwd[, i] <- as.vector(u%*%matrix(phi_star_fwd[, i], nrow = K, ncol = K))
-    #browser()
+    phi_fwd[, i] <- as.vector(t(u%*%matrix(phi_star_fwd[, i], nrow = K, ncol = K, byrow = TRUE)))
     resid_fwd[i, ] <- as.vector(u%*% matrix(resid_tmp[index, 1:K], ncol = 1))
-    #browser()
+
     ### transformation for innovations
     if(length(sigma2_mean) > 1){
       SIGMA[[i]] <- u %*% diag(sigma2_mean)%*%t(u)
@@ -347,7 +342,8 @@ unpack_res <- function(res, m, n_Total, K, type){
     u_inv <- diag(K)
     u_inv[lower.tri(u_inv)] <- -u_inv_bwd[, i]
     u <- solve(u_inv, diag(K))
-    phi_bwd[, i] <- as.vector(u%*%matrix(phi_star_bwd[, i], nrow = K, ncol = K))
+    phi_bwd[, i] <- as.vector(t(u%*%matrix(phi_star_bwd[, i], nrow = K, ncol = K, byrow = TRUE)))
+
     resid_bwd[i, ] <- as.vector(u%*% matrix(resid_tmp[index, (K+1):(2*K)], ncol = 1))
     index <- index + 1
   }
