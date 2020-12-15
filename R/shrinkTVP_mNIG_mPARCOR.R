@@ -84,27 +84,12 @@ PARCOR_shrinkage <- function(Y, P,
   ## number of time points
   n_Total <- nrow(Y)
   ### storage results
-  result_all <- list("median" = NA, "mean" = NA, "qtl" = NA, "qtu" = NA)
-  PHI_fwd <- array(NA, dim = c(K^2, n_Total, P))
-  PHI_bwd <- array(NA, dim = c(K^2, n_Total, P))
-  PHI_star_fwd <- array(NA, dim = c(K^2, n_Total, P))
-  PHI_star_bwd <- array(NA, dim = c(K^2, n_Total, P))
-  u_inv_fwd <- array(0, dim = c((K^2-K)/2, n_Total, P))
-  u_inv_bwd <- array(0, dim = c((K^2-K)/2, n_Total, P))
-  theta_sr <- rep(list(NA), P)
-  result <- list(PHI_fwd = PHI_fwd, PHI_bwd = PHI_bwd,
-                 PHI_star_fwd = PHI_star_fwd, PHI_star_bwd = PHI_star_bwd,
-                 u_inv_fwd = u_inv_fwd, u_inv_bwd = u_inv_bwd,
-                 SIGMA = NA, theta_sr = theta_sr)
-
-  PHI_fwd_samp <- array(NA, dim = c(K^2, n_Total, P, nsave))
-  PHI_bwd_samp <- array(NA, dim = c(K^2, n_Total, P, nsave))
-
-
   ### stage m = 1
   result1 <- run_parcor_parallel(F1 = t(Y), delta = delta, P = 1, S_0 = S_0, sample_size = sample_size,
                                  chains = chains, DIC = DIC, uncertainty = !uncertainty)
   if(uncertainty){
+    PHI_fwd_samp <- array(NA, dim = c(K^2, n_Total, P, nsave))
+    PHI_bwd_samp <- array(NA, dim = c(K^2, n_Total, P, nsave))
     phi_fwd <- matrix(0, ncol = n_Total, nrow = K^2)
     phi_bwd <- matrix(0, ncol = n_Total, nrow = K^2)
     for(i in 1:nsave){
@@ -118,6 +103,17 @@ PARCOR_shrinkage <- function(Y, P,
       PHI_bwd_samp[, , 1, i] <- phi_bwd
     }
   }else{
+    PHI_fwd <- array(NA, dim = c(K^2, n_Total, P))
+    PHI_bwd <- array(NA, dim = c(K^2, n_Total, P))
+    PHI_star_fwd <- array(NA, dim = c(K^2, n_Total, P))
+    PHI_star_bwd <- array(NA, dim = c(K^2, n_Total, P))
+    u_inv_fwd <- array(0, dim = c((K^2-K)/2, n_Total, P))
+    u_inv_bwd <- array(0, dim = c((K^2-K)/2, n_Total, P))
+    theta_sr <- rep(list(NA), P)
+    result <- list(PHI_fwd = PHI_fwd, PHI_bwd = PHI_bwd,
+                   PHI_star_fwd = PHI_star_fwd, PHI_star_bwd = PHI_star_bwd,
+                   u_inv_fwd = u_inv_fwd, u_inv_bwd = u_inv_bwd,
+                   SIGMA = NA, theta_sr = theta_sr)
     result$PHI_fwd[, , 1] <- result1$phi_fwd
     result$PHI_bwd[, , 1] <- result1$phi_bwd
   }
@@ -174,7 +170,7 @@ PARCOR_shrinkage <- function(Y, P,
   }
   sfStop()
   if(uncertainty){
-    result <- list(phi_fwd = PHI_fwd_samp, phi_bwd = PHI_bwd_samp, SIGMA = res$SIGMA)
+    result <- list(phi_fwd = PHI_fwd_samp, phi_bwd = PHI_bwd_samp, SIGMA = res$qSIGMA)
   }
 
   return(result)
