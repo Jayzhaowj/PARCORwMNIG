@@ -170,7 +170,7 @@ PARCOR_shrinkage <- function(Y, P,
   }
   sfStop()
   if(uncertainty){
-    result <- list(phi_fwd = PHI_fwd_samp, phi_bwd = PHI_bwd_samp, SIGMA = res$qSIGMA)
+    result <- list(phi_fwd = PHI_fwd_samp, phi_bwd = PHI_bwd_samp, SIGMA = res$SIGMA)
   }
 
   return(result)
