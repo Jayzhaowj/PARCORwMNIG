@@ -498,12 +498,12 @@ shrinkTVP_mNIG <- function(formula,
     if(!sv){
       res <- list("beta" = res$beta,
                   "theta_sr" = res$theta_sr,
-                  "sigma2" = res$sigma2, "residuals" = residuals,
+                  "sigma2" = res$sigma2, "residuals" = res$residuals,
                   "delta_mean" = delta_mean)
     }else{
       res <- list("beta" = res$beta,
                   "theta_sr" = res$theta_sr,
-                  "sigma2" = res$sv_sigma2, "residuals" = residuals,
+                  "sigma2" = res$sv_sigma2, "residuals" = res$residuals,
                   "delta_mean" = delta_mean)
     }
   }

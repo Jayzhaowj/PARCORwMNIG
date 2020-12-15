@@ -9,16 +9,9 @@ build_model <- function(F1_fwd, F1_bwd, P, m, K, n_Total){
   n_1 <- m + 1
   n_T <- n_Total
   data <- rep(list(NA), 2*K)
-#  if(m == 2){
-#    tmp_x <- cbind(F1_bwd[(n_1-1):(n_T-1), , drop = FALSE], F1_bwd[n_1:n_T-2, , drop = FALSE])
-#  }else{
-    tmp_x <- F1_bwd[(n_1-m):(n_T-m), , drop = FALSE]
-#  }
-
-
+  tmp_x <- F1_bwd[(n_1-m):(n_T-m), , drop = FALSE]
   y <- F1_fwd[(n_1):n_T, , drop = FALSE]
   index <- 0
-  #browser()
   for(k in 1:K){
     index <- index + 1
     if(k==1){
@@ -29,16 +22,11 @@ build_model <- function(F1_fwd, F1_bwd, P, m, K, n_Total){
                                         y[, 1:(k-1)]))
     }
   }
-  #browser()
 
+  ## the backward PARCOR
   n_1 <- 1
   n_T <- n_Total - m
-#  if(m == 2){
-#    tmp_x <- cbind(F1_fwd[(n_1+1):(n_T+1), , drop = FALSE], F1_fwd[(n_1+m):(n_T+m), , drop = FALSE])
-#  }else{
-    tmp_x <- F1_fwd[(n_1+m):(n_T+m), , drop = FALSE]
-#  }
-
+  tmp_x <- F1_fwd[(n_1+m):(n_T+m), , drop = FALSE]
   y <- F1_bwd[n_1:n_T, , drop = FALSE]
   for(k in 1:K){
     index <- index + 1
@@ -50,9 +38,7 @@ build_model <- function(F1_fwd, F1_bwd, P, m, K, n_Total){
                                   cbind(tmp_x,
                                         y[, 1:(k-1)]))
     }
-
   }
-  #browser()
   return(data)
 }
 
@@ -69,8 +55,9 @@ PARCOR_shrinkage <- function(Y, P,
                              SAVS = TRUE,
                              sv = FALSE,
                              sv_param,
-                             simple = TRUE,
-                             delta, S_0, sample_size = 500, chains = 5, DIC = FALSE, uncertainty = FALSE){
+                             delta, S_0,
+                             sample_size = 500,
+                             chains = 5, DIC = FALSE, uncertainty = FALSE){
   nsave <- (niter - nburn)/nthin
   default_hyper <- list(c0 = 2.5,
                         g0 = 5,
@@ -110,19 +97,31 @@ PARCOR_shrinkage <- function(Y, P,
                  u_inv_fwd = u_inv_fwd, u_inv_bwd = u_inv_bwd,
                  SIGMA = NA, theta_sr = theta_sr)
 
-  result_all$median <- result
-  result_all$qtl <- result
-  result_all$qtu <- result
-
   PHI_fwd_samp <- array(NA, dim = c(K^2, n_Total, P, nsave))
   PHI_bwd_samp <- array(NA, dim = c(K^2, n_Total, P, nsave))
 
 
   ### stage m = 1
   result1 <- run_parcor_parallel(F1 = t(Y), delta = delta, P = 1, S_0 = S_0, sample_size = sample_size,
-                                 chains = chains, DIC = DIC, uncertainty = uncertainty)
-  result_all$median$PHI_fwd[, , 1] <- result1$phi_fwd
-  result_all$median$PHI_bwd[, , 1] <- result1$phi_bwd
+                                 chains = chains, DIC = DIC, uncertainty = !uncertainty)
+  if(uncertainty){
+    phi_fwd <- matrix(0, ncol = n_Total, nrow = K^2)
+    phi_bwd <- matrix(0, ncol = n_Total, nrow = K^2)
+    for(i in 1:nsave){
+      for(j in (1+1):(n_Total-1)){
+        phi_fwd[, j] <- rmvn(n = 1, mu = as.vector(result1$phi_fwd[, j, 1]),
+                             sigma = result1$Cnt_fwd[[1]][[j]])
+        phi_bwd[, j] <- rmvn(n = 1, mu = as.vector(result1$phi_bwd[, j, 1]),
+                             sigma = result1$Cnt_bwd[[1]][[j]])
+      }
+      PHI_fwd_samp[, , 1, i] <- phi_fwd
+      PHI_bwd_samp[, , 1, i] <- phi_bwd
+    }
+  }else{
+    result$PHI_fwd[, , 1] <- result1$phi_fwd
+    result$PHI_bwd[, , 1] <- result1$phi_bwd
+  }
+
 
   ### stage m = 2
   data <- build_model(F1_fwd = t(result1$F1_fwd), F1_bwd = t(result1$F1_bwd), P = P,
@@ -132,7 +131,7 @@ PARCOR_shrinkage <- function(Y, P,
 
   sfLibrary(PARCORwMNIG)
   sfExport("K", "niter", "nburn", "nthin", "hyperprior_param", "ret_beta_nc",
-           "SAVS", "sv", "sv_param", "simple")
+           "SAVS", "sv", "sv_param")
   for(i in 2:P){
     res_tmp <- sfLapply(1:length(data), function(x) shrinkTVP_mNIG(formula = y ~ .-1,
                                                                    data = data[[x]], K = K,
@@ -145,73 +144,44 @@ PARCOR_shrinkage <- function(Y, P,
                                                                    SAVS = SAVS,
                                                                    sv = sv,
                                                                    sv_param = sv_param,
-                                                                   simple = simple))
+                                                                   simple = !uncertainty))
 
 
-    if(simple){
+    if(!uncertainty){
       ### obtain median
       res <- unpack_res(res = res_tmp, m = i, n_Total = n_Total, K = K, type = "beta_median")
       data <- build_model(F1_fwd = res$resid_fwd,
                           F1_bwd = res$resid_bwd, P = P, m = i+1,
                           K = K, n_Total = n_Total)
-      result_all$median$PHI_fwd[, , i] <- res$phi_fwd
-      result_all$median$PHI_bwd[, , i] <- res$phi_bwd
-      result_all$median$PHI_star_fwd[, , i] <- res$phi_star_fwd
-      result_all$median$PHI_star_bwd[, , i] <- res$phi_star_bwd
-      result_all$median$u_inv_fwd[, , i] <- res$u_inv_fwd
-      result_all$median$u_inv_bwd[, , i] <- res$u_inv_bwd
+      result$PHI_fwd[, , i] <- res$phi_fwd
+      result$PHI_bwd[, , i] <- res$phi_bwd
+      result$PHI_star_fwd[, , i] <- res$phi_star_fwd
+      result$PHI_star_bwd[, , i] <- res$phi_star_bwd
+      result$u_inv_fwd[, , i] <- res$u_inv_fwd
+      result$u_inv_bwd[, , i] <- res$u_inv_bwd
       #result_all$median$theta_sr[[i]] <- res_tmp$theta_sr
       if(i == P)
-        result_all$median$SIGMA <- res$SIGMA
-
-
-      ### obtain lower bound of 95% credible interval
-      res <- unpack_res(res = res_tmp, m = i, n_Total = n_Total, K = K, type = "beta_qtl")
-
-      result_all$qtl$PHI_fwd[, , i] <- res$phi_fwd
-      result_all$qtl$PHI_bwd[, , i] <- res$phi_bwd
-      result_all$qtl$PHI_star_fwd[, , i] <- res$phi_star_fwd
-      result_all$qtl$PHI_star_bwd[, , i] <- res$phi_star_bwd
-      result_all$qtl$u_inv_fwd[, , i] <- res$u_inv_fwd
-      result_all$qtl$u_inv_bwd[, , i] <- res$u_inv_bwd
-      #result_all$qtl$theta_sr[[i]] <- res_tmp$theta_sr
-      if(i == P)
-        result_all$qtl$SIGMA <- res$SIGMA
-
-
-      ### obtain upper bound of 95% credible interval
-      res <- unpack_res(res = res_tmp, m = i, n_Total = n_Total, K = K, type = "beta_qtu")
-
-      result_all$qtu$PHI_fwd[, , i] <- res$phi_fwd
-      result_all$qtu$PHI_bwd[, , i] <- res$phi_bwd
-      result_all$qtu$PHI_star_fwd[, , i] <- res$phi_star_fwd
-      result_all$qtu$PHI_star_bwd[, , i] <- res$phi_star_bwd
-      result_all$qtu$u_inv_fwd[, , i] <- res$u_inv_fwd
-      result_all$qtu$u_inv_bwd[, , i] <- res$u_inv_bwd
-      #result_all$qtu$theta_sr[[i]] <- res_tmp[[1]]$theta_sr
-      if(i == P)
-        result_all$qtu$SIGMA <- res$SIGMA
+        result$SIGMA <- res$SIGMA
     }else{
-      res <- unpack_res_uni(res = res_tmp, m = i, n_Total = n_Total, K = K, nsave = nsave)
-      PHI_fwd_samp[, , i, ] <- res$phi_fwd
-      PHI_bwd_samp[, , i, ] <- res$phi_bwd
+      res <- unpack_res_sample(res = res_tmp, m = i, n_Total = n_Total, K = K, nsave = nsave, P = P)
       data <- build_model(F1_fwd = res$resid_fwd,
                           F1_bwd = res$resid_bwd, P = P, m = i+1,
                           K = K, n_Total = n_Total)
-      if(i == P)
-        SIGMA <- res$SIGMA
+      PHI_fwd_samp[, , i, ] <- res$phi_fwd
+      PHI_bwd_samp[, , i, ] <- res$phi_bwd
     }
     cat("Stage: ", i, "/", P, "\n")
   }
-  if(!simple){
-    result_all <- list(phi_fwd = PHI_fwd_samp, phi_bwd = PHI_bwd_samp, SIGMA = SIGMA)
-  }
   sfStop()
-  return(result_all)
+  if(uncertainty){
+    result <- list(phi_fwd = PHI_fwd_samp, phi_bwd = PHI_bwd_samp, SIGMA = res$SIGMA)
+  }
+
+  return(result)
 }
 
 
-unpack_res_uni <- function(res, m, n_Total, K, nsave){
+unpack_res_sample <- function(res, m, n_Total, K, nsave, P){
   ## unpack PARCOR coefficients
   ### forward time index
   n_1_fwd <- m + 1
@@ -222,37 +192,78 @@ unpack_res_uni <- function(res, m, n_Total, K, nsave){
   n_T_bwd <- n_Total - m
 
   ## unpack residuals
-  resid_tmp <- t(matrix(unlist(lapply(res, function(x) x$residuals)),
-                        nrow = length(res), byrow = TRUE))
+  resid_tmp <- array(unlist(lapply(res, function(x) x$residuals)), dim = c(n_T_fwd - n_1_fwd + 1, nsave, K^2))
+  resid_tmp <- aperm(resid_tmp, perm = c(1, 3, 2))
 
   ## unpack observational innovation
   tmp_sigma2 <- simplify2array(lapply(res, function(x) x$sigma2))
-  sigma2 <- tmp_sigma2[, , 1:K]
-  if(is.matrix(sigma2)){
-    sigma2_mean <- apply(sigma2, 2, mean)
-  }else if(is.array(sigma2)){
-    sigma2_mean <- apply(sigma2, 2:3, mean)
-  }else{
-    sigma2_mean <- mean(sigma2)
+  sigma2 <- tmp_sigma2[, 1, 1:K]
+
+  ## storage
+  resid_fwd <- array(NA, dim = c(n_Total, K, nsave))
+  resid_bwd <- array(NA, dim = c(n_Total, K, nsave))
+  phi_fwd <- array(NA, dim = c(K^2, n_Total, nsave))
+  phi_bwd <- array(NA, dim = c(K^2, n_Total, nsave))
+  phi_star_fwd <- array(NA, dim = c(K^2, n_Total, nsave))
+  phi_star_bwd <- array(NA, dim = c(K^2, n_Total, nsave))
+  u_inv_fwd <- array(0, dim = c((K^2-K)/2, n_Total, nsave))
+  u_inv_bwd <- array(0, dim = c((K^2-K)/2, n_Total, nsave))
+  index_fwd <- 1
+  index_bwd <- 1
+  SIGMA <- array(NA, dim = c(K, K, n_T_fwd - n_1_fwd + 1, nsave))
+
+
+  ### unpack the results
+  for(i in 1:nsave){
+    for(k in 1:K){
+      ### forward
+      phi_star_fwd[((k-1)*K+1):(k*K), n_1_fwd:n_T_fwd, i] <- t(res[[k]][["beta"]][-1, 1:K, i])
+      if(k > 1){
+        n <- nrow(t(res[[k]][["beta"]][, 1:(k-1)+K], i))
+        u_inv_fwd[index_fwd:(index_fwd + n - 1), n_1_fwd:n_T_fwd, i] <- t(res[[k]][["beta"]][-1, 1:(k-1)+K, i])
+        index_fwd <- index_fwd + n
+      }
+      ### backward
+      phi_star_bwd[((k-1)*K+1):(k*K), n_1_bwd:n_T_bwd, i] <- t(res[[k+K]][["beta"]][-1, 1:K, i])
+
+      if(k > 1){
+        n <- nrow(t(res[[k+K]][["beta"]][, 1:(k-1)+K, i]))
+        u_inv_bwd[index_bwd:(index_bwd + n - 1), n_1_bwd:n_T_bwd, i] <- t(res[[k+K]][["beta"]][-1, 1:(k-1)+K, i])
+        index_bwd <- index_bwd + n
+      }
+    }
+
+
+    index <- 1
+    for(j in n_1_fwd:n_T_fwd){
+      u_inv <- diag(K)
+      u_inv[lower.tri(u_inv)] <- -u_inv_fwd[, j, i]
+      u <- solve(u_inv, diag(K))
+      phi_fwd[, j, i] <- as.vector(t(u%*%matrix(phi_star_fwd[, j, i], nrow = K, ncol = K, byrow = TRUE)))
+      resid_fwd[j, , i] <- as.vector(u%*% matrix(resid_tmp[index, 1:K, i], ncol = 1))
+
+      ### transformation for innovations
+      if(m == P){
+        SIGMA[, , j, i] <- u %*% diag(sigma2[i, ])%*%t(u)
+      }
+      index <- index + 1
+    }
+    index <- 1
+    ### transformation for backward residuals
+    for(j in n_1_bwd:n_T_bwd){
+      u_inv <- diag(K)
+      u_inv[lower.tri(u_inv)] <- -u_inv_bwd[, j, i]
+      u <- solve(u_inv, diag(K))
+      phi_bwd[, j, i] <- as.vector(t(u%*%matrix(phi_star_bwd[, j, i], nrow = K, ncol = K, byrow = TRUE)))
+      resid_bwd[j, , i] <- as.vector(u%*% matrix(resid_tmp[index, (K+1):(2*K), i], ncol = 1))
+      index <- index + 1
+    }
   }
-  resid_fwd <- matrix(NA, nrow = n_Total, ncol = K)
-  resid_bwd <- matrix(NA, nrow = n_Total, ncol = K)
-  phi_fwd <- array(NA, dim = c(n_Total, K^2, nsave))
-  phi_bwd <- array(NA, dim = c(n_Total, K^2, nsave))
-
-  #browser()
-  resid_fwd[n_1_fwd:n_T_fwd, ] <- resid_tmp[, 1]
-  resid_bwd[n_1_bwd:n_T_bwd, ] <- resid_tmp[, 2]
-  phi_fwd[n_1_fwd:n_T_fwd, , ] <- res[[1]][["beta"]][-1, , ]
-  phi_bwd[n_1_bwd:n_T_bwd, , ] <- res[[2]][["beta"]][-1, , ]
-
-  phi_fwd <- aperm(phi_fwd, c(2, 1, 3))
-  phi_bwd <- aperm(phi_bwd, c(2, 1, 3))
   return(list(phi_fwd = phi_fwd,
               phi_bwd = phi_bwd,
-              resid_fwd = resid_fwd,
-              resid_bwd = resid_bwd,
-              SIGMA = sigma2_mean))
+              resid_fwd = apply(resid_fwd, 1:2, median),
+              resid_bwd = apply(resid_bwd, 1:2, median),
+              SIGMA = SIGMA))
 }
 
 
@@ -262,7 +273,9 @@ unpack_res <- function(res, m, n_Total, K, type){
                         nrow = length(res), byrow = TRUE))
 
   ## unpack observational innovation
+  ## dimension tmp_sigma2 is nsave * 1 * (2*K)
   tmp_sigma2 <- simplify2array(lapply(res, function(x) x$sigma2))
+  #browser()
   sigma2 <- tmp_sigma2[, , 1:K]
   if(is.matrix(sigma2)){
     sigma2_mean <- apply(sigma2, 2, mean)
@@ -277,12 +290,8 @@ unpack_res <- function(res, m, n_Total, K, type){
   resid_bwd <- matrix(NA, nrow = n_Total, ncol = K)
   phi_fwd <- matrix(NA, nrow = K^2, ncol = n_Total)
   phi_bwd <- matrix(NA, nrow = K^2, ncol = n_Total)
-  phi_int_fwd <- matrix(NA, nrow = K, ncol = n_Total)
-  phi_int_bwd <- matrix(NA, nrow = K, ncol = n_Total)
   phi_star_fwd <- matrix(NA, nrow = K^2, ncol = n_Total)
   phi_star_bwd <- matrix(NA, nrow = K^2, ncol = n_Total)
-  phi_star_int_fwd <- matrix(NA, nrow = K, ncol = n_Total)
-  phi_star_int_bwd <- matrix(NA, nrow = K, ncol = n_Total)
   u_inv_fwd <- matrix(0, nrow = (K^2-K)/2, ncol = n_Total)
   u_inv_bwd <- matrix(0, nrow = (K^2-K)/2, ncol = n_Total)
   index_fwd <- 1

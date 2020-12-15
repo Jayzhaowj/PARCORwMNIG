@@ -7,9 +7,9 @@ Maintainer: The package maintainer <yourself@somewhere.net>
 Description: More about what it does (maybe more than one line)
     Use four spaces when indenting paragraphs within the Description.
 License: GPL (>= 2)
-Depends: R (>= 3.3.0), snowfall, PARCOR
-Imports: Rcpp, GIGrvg, stochvol, coda, methods, utils, zoo, snowfall, PARCOR
-LinkingTo: Rcpp, RcppArmadillo, GIGrvg, RcppProgress, stochvol, snowfall, PARCOR
+Depends: R (>= 3.3.0), snowfall, PARCOR, mvnfast
+Imports: Rcpp, GIGrvg, stochvol, coda, methods, utils, zoo, snowfall, PARCOR, mvnfast
+LinkingTo: Rcpp, RcppArmadillo, GIGrvg, RcppProgress, stochvol, snowfall, PARCOR, mvnfast
 RoxygenNote: 6.1.1
 Suggests: testthat, knitr, rmarkdown, R.rsp
 VignetteBuilder: R.rsp
