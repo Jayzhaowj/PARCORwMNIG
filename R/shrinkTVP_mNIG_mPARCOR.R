@@ -105,17 +105,20 @@ PARCOR_shrinkage <- function(Y, P,
   }else{
     PHI_fwd <- array(NA, dim = c(K^2, n_Total, P))
     PHI_bwd <- array(NA, dim = c(K^2, n_Total, P))
-    PHI_star_fwd <- array(NA, dim = c(K^2, n_Total, P))
-    PHI_star_bwd <- array(NA, dim = c(K^2, n_Total, P))
-    u_inv_fwd <- array(0, dim = c((K^2-K)/2, n_Total, P))
-    u_inv_bwd <- array(0, dim = c((K^2-K)/2, n_Total, P))
-    theta_sr <- rep(list(NA), P)
-    result <- list(PHI_fwd = PHI_fwd, PHI_bwd = PHI_bwd,
-                   PHI_star_fwd = PHI_star_fwd, PHI_star_bwd = PHI_star_bwd,
-                   u_inv_fwd = u_inv_fwd, u_inv_bwd = u_inv_bwd,
-                   SIGMA = NA, theta_sr = theta_sr)
-    result$PHI_fwd[, , 1] <- result1$phi_fwd
-    result$PHI_bwd[, , 1] <- result1$phi_bwd
+    # PHI_star_fwd <- array(NA, dim = c(K^2, n_Total, P))
+    # PHI_star_bwd <- array(NA, dim = c(K^2, n_Total, P))
+    # u_inv_fwd <- array(0, dim = c((K^2-K)/2, n_Total, P))
+    # u_inv_bwd <- array(0, dim = c((K^2-K)/2, n_Total, P))
+    #theta_sr <- rep(list(NA), P)
+    SIGMA <- rep(list(NA), P)
+    # result <- list(PHI_fwd = PHI_fwd, PHI_bwd = PHI_bwd,
+    #                PHI_star_fwd = PHI_star_fwd, PHI_star_bwd = PHI_star_bwd,
+    #                u_inv_fwd = u_inv_fwd, u_inv_bwd = u_inv_bwd,
+    #                SIGMA = NA, theta_sr = theta_sr)
+    # result$PHI_fwd[, , 1] <- result1$phi_fwd
+    # result$PHI_bwd[, , 1] <- result1$phi_bwd
+    PHI_fwd[, , 1] <- result1$phi_fwd
+    PHI_bwd[, , 1] <- result1$phi_bwd
   }
 
 
@@ -149,15 +152,16 @@ PARCOR_shrinkage <- function(Y, P,
       data <- build_model(F1_fwd = res$resid_fwd,
                           F1_bwd = res$resid_bwd, P = P, m = i+1,
                           K = K, n_Total = n_Total)
-      result$PHI_fwd[, , i] <- res$phi_fwd
-      result$PHI_bwd[, , i] <- res$phi_bwd
-      result$PHI_star_fwd[, , i] <- res$phi_star_fwd
-      result$PHI_star_bwd[, , i] <- res$phi_star_bwd
-      result$u_inv_fwd[, , i] <- res$u_inv_fwd
-      result$u_inv_bwd[, , i] <- res$u_inv_bwd
+      PHI_fwd[, , i] <- res$phi_fwd
+      PHI_bwd[, , i] <- res$phi_bwd
+      # result$PHI_fwd[, , i] <- res$phi_fwd
+      # result$PHI_bwd[, , i] <- res$phi_bwd
+      # result$PHI_star_fwd[, , i] <- res$phi_star_fwd
+      # result$PHI_star_bwd[, , i] <- res$phi_star_bwd
+      # result$u_inv_fwd[, , i] <- res$u_inv_fwd
+      # result$u_inv_bwd[, , i] <- res$u_inv_bwd
       #result_all$median$theta_sr[[i]] <- res_tmp$theta_sr
-      if(i == P)
-        result$SIGMA <- res$SIGMA
+      SIGMA[[i]] <- res$SIGMA
     }else{
       res <- unpack_res_sample(res = res_tmp, m = i, n_Total = n_Total, K = K, nsave = nsave, P = P)
       data <- build_model(F1_fwd = res$resid_fwd,
@@ -165,12 +169,15 @@ PARCOR_shrinkage <- function(Y, P,
                           K = K, n_Total = n_Total)
       PHI_fwd_samp[, , i, ] <- res$phi_fwd
       PHI_bwd_samp[, , i, ] <- res$phi_bwd
+      SIGMA[[i]] <- res$SIGMA
     }
     cat("Stage: ", i, "/", P, "\n")
   }
   sfStop()
   if(uncertainty){
-    result <- list(phi_fwd = PHI_fwd_samp, phi_bwd = PHI_bwd_samp, SIGMA = res$SIGMA)
+    result <- list(phi_fwd = PHI_fwd_samp, phi_bwd = PHI_bwd_samp, SIGMA = SIGMA)
+  }else{
+    result <- list(phi_fwd = PHI_fwd, phi_bwd = PHI_bwd, SIGMA = SIGMA)
   }
 
   return(result)
@@ -355,10 +362,10 @@ unpack_res <- function(res, m, n_Total, K, type){
 
   return(list(phi_fwd = phi_fwd,
               phi_bwd = phi_bwd,
-              phi_star_fwd = phi_star_fwd,
-              phi_star_bwd = phi_star_bwd,
-              u_inv_fwd = u_inv_fwd,
-              u_inv_bwd = u_inv_bwd,
+              # phi_star_fwd = phi_star_fwd,
+              # phi_star_bwd = phi_star_bwd,
+              # u_inv_fwd = u_inv_fwd,
+              # u_inv_bwd = u_inv_bwd,
               resid_fwd = resid_fwd,
               resid_bwd = resid_bwd,
               SIGMA = SIGMA))
