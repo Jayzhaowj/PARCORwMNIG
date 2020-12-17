@@ -86,7 +86,7 @@ PARCOR_shrinkage <- function(Y, P,
   ### storage results
   ### stage m = 1
   result1 <- run_parcor_parallel(F1 = t(Y), delta = delta, P = 1, S_0 = S_0, sample_size = sample_size,
-                                 chains = chains, DIC = DIC, uncertainty = !uncertainty)
+                                 chains = chains, DIC = DIC, uncertainty = uncertainty)
   if(uncertainty){
     PHI_fwd_samp <- array(NA, dim = c(K^2, n_Total, P, nsave))
     PHI_bwd_samp <- array(NA, dim = c(K^2, n_Total, P, nsave))
